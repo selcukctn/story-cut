@@ -1,255 +1,304 @@
-import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
+import * as SQLite from 'expo-sqlite';
 
-// Veritabanı yolu tanımlama
-const dbName = 'videos.db';
-const dbPath = FileSystem.documentDirectory + dbName;
+const DB_NAME = 'videos.db';
 
-// Veritabanı bağlantısı
-const db = SQLite.openDatabaseSync(dbPath);
-const getDatabase = () => {
-  if (db === null) {
-    db = SQLite.openDatabaseSync(DATABASE_NAME);
+class Database {
+  constructor() {
+    this.db = null;
   }
-  return db;
-};
-// Veritabanı kurulumu
-const setupDatabase = async () => {
-  try {
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS videos (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        description TEXT,
-        uri TEXT,
-        originalUri TEXT,
-        duration REAL,
-        startTime REAL,
-        endTime REAL,
-        createdAt TEXT,
-        thumbnailUri TEXT
-      )
-    `);
-    console.log("Tablo oluşturuldu");
-  } catch (error) {
-    console.error('Veritabanı kurulum hatası:', error);
-    throw error;
-  }
-};
 
-// Video ekleme fonksiyonu
-const addVideo = async (videoData) => {
-  const db = getDatabase();
-  try {
-    // Gelen veriyi kontrol et
-    console.log('Kaydedilecek video verisi:', JSON.stringify(videoData, null, 2));
+  async ensureDirectories() {
+    if (Platform.OS === 'ios') {
+      const dirs = [
+        `${FileSystem.documentDirectory}SQLite`,
+        `${FileSystem.documentDirectory}videos`,
+        `${FileSystem.documentDirectory}thumbnails`
+      ];
 
-    // Veriyi güvenli bir şekilde hazırla
-    const video = {
-      id: videoData.id || `video_${Date.now()}`,
-      name: videoData.name || 'İsimsiz Video',
-      description: videoData.description || '',
-      uri: videoData.uri,
-      originalUri: videoData.originalUri || videoData.uri,
-      duration: Number(videoData.duration) || 0,
-      startTime: Number(videoData.startTime) || 0,
-      endTime: Number(videoData.endTime) || 0,
-      createdAt: videoData.createdAt || new Date().toISOString(),
-      thumbnailUri: videoData.thumbnailUri || ''
-    };
-
-    // SQL sorgusunu template literal ile oluştur
-    const query = `
-      INSERT OR REPLACE INTO videos (
-        id, 
-        name, 
-        description, 
-        uri,
-        originalUri,
-        duration,
-        startTime,
-        endTime,
-        createdAt,
-        thumbnailUri
-      ) VALUES (
-        '${video.id}',
-        '${video.name}',
-        '${video.description}',
-        '${video.uri}',
-        '${video.originalUri}',
-        ${video.duration},
-        ${video.startTime},
-        ${video.endTime},
-        '${video.createdAt}',
-        '${video.thumbnailUri}'
-      )
-    `;
-
-    console.log('SQL Sorgusu:', query);
-
-    // Sorguyu çalıştır
-    await db.execAsync(query);
-
-    // Kaydın başarılı olup olmadığını kontrol et
-    const savedVideos = await db.execAsync(`
-      SELECT * FROM videos WHERE id = '${video.id}'
-    `);
-
-    console.log('Kaydedilen video sorgu sonucu:', savedVideos);
-
-    // SQLite'ın döndürdüğü sonuç yapısını kontrol et
-    if (savedVideos && Array.isArray(savedVideos) && savedVideos.length > 0) {
-      console.log('Video başarıyla kaydedildi');
-      return true;
+      for (const dir of dirs) {
+        const { exists } = await FileSystem.getInfoAsync(dir);
+        if (!exists) {
+          console.log(`Dizin oluşturuluyor: ${dir}`);
+          await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        }
+      }
     }
-
-    // Eğer buraya kadar geldiyse ve hata oluşmadıysa, kayıt başarılıdır
-    console.log('Video kaydedildi ama sorgu sonucu boş döndü');
-    return true;
-
-  } catch (error) {
-    console.error('Video kaydetme hatası db:', error);
-    throw error;
   }
-};
 
-// Videoları getirme fonksiyonu
-const getVideos = async () => {
-  try {
-    const result = await db.getAllAsync(`
-      SELECT * FROM videos ORDER BY createdAt DESC
-    `);
-    console.log("Bulunan videolar:", result);
-    return result || [];
-  } catch (error) {
-    console.error('Videoları getirme hatası:', error);
-    return [];
-  }
-};
-
-const deleteVideo = async (id) => {
-  const db = getDatabase();
-  try {
-    console.log('Video silme işlemi başlatılıyor, ID:', id);
-
-    // Önce video bilgilerini al
-    const query = `
-      SELECT * FROM videos 
-      WHERE id = '${id}'
-    `;
-
-    const result = await db.getAllAsync(query);
-    console.log('Video arama sonucu:', result);
-    const videos = await getVideos();
-    console.log('Videolar:', videos);
-    if (result && result.length > 0) {
-      const video = result[0];
-      console.log('Silinecek video bulundu:', video);
-      // Dosyaları sil
-      try {
-        if (video.uri) {
-          const uriExists = await FileSystem.getInfoAsync(video.uri);
-          if (uriExists.exists) {
-            await FileSystem.deleteAsync(video.uri, { idempotent: true });
-            console.log('Video dosyası silindi:', video.uri);
-          }
-        }
-        
-        if (video.thumbnailUri) {
-          const thumbnailExists = await FileSystem.getInfoAsync(video.thumbnailUri);
-          if (thumbnailExists.exists) {
-            await FileSystem.deleteAsync(video.thumbnailUri, { idempotent: true });
-            console.log('Thumbnail dosyası silindi:', video.thumbnailUri);
-          }
-        }
-      } catch (fileError) {
-        console.error('Dosya silme hatası:', fileError);
+  async init() {
+    try {
+      if (this.db) {
+        return this.db;
       }
 
-      // Veritabanından kaydı sil
-      const deleteQuery = `
-        DELETE FROM videos 
-        WHERE id = '${id}'
-      `;
+      await this.ensureDirectories();
+
+      let dbPath = DB_NAME;
+      if (Platform.OS === 'ios') {
+        dbPath = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
+      }
+
+      console.log('Veritabanı açılıyor...', dbPath);
       
-      await db.execAsync(deleteQuery);
-      console.log('Video veritabanından silindi');
-      return true;
-    } else {
+      this.db = SQLite.openDatabaseSync(DB_NAME);
+      
+      if (!this.db) {
+        throw new Error('Veritabanı açılamadı');
+      }
+
+      console.log('Veritabanı bağlantısı başarılı');
+
+      // Tablo kontrolü ve oluşturma
+      await this.db.execAsync(`
+        CREATE TABLE IF NOT EXISTS videos (
+          id TEXT PRIMARY KEY,
+          name TEXT,
+          description TEXT,
+          uri TEXT,
+          originalUri TEXT,
+          duration REAL,
+          startTime REAL,
+          endTime REAL,
+          createdAt TEXT,
+          thumbnailUri TEXT
+        );
+      `);
+
+      // Test verisi ekle
+      const testQuery = "SELECT * FROM videos LIMIT 1;";
+      const testResult = await this.db.execAsync(testQuery);
+      console.log('Test sorgu sonucu:', testResult);
+
+      return this.db;
+    } catch (error) {
+      console.error('Veritabanı init hatası:', error);
+      throw error;
+    }
+  }
+
+  async addVideo(videoData) {
+    try {
+      if (!this.db) await this.init();
+
+      // iOS için dosya yollarını düzelt
+      if (Platform.OS === 'ios') {
+        if (videoData.uri) {
+          const newVideoPath = `${FileSystem.documentDirectory}videos/video_${Date.now()}.mp4`;
+          if (videoData.uri !== newVideoPath) {
+            await FileSystem.moveAsync({
+              from: videoData.uri,
+              to: newVideoPath
+            });
+            videoData.uri = newVideoPath;
+          }
+        }
+
+        if (videoData.thumbnailUri) {
+          if (videoData.thumbnailUri.includes('default_thumb.jpg')) {
+            const newThumbPath = `${FileSystem.documentDirectory}thumbnails/thumb_${Date.now()}.jpg`;
+            const defaultThumbData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+            await FileSystem.writeAsStringAsync(newThumbPath, defaultThumbData, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            videoData.thumbnailUri = newThumbPath;
+          } else {
+            const newThumbPath = `${FileSystem.documentDirectory}thumbnails/thumb_${Date.now()}.jpg`;
+            if (videoData.thumbnailUri !== newThumbPath) {
+              await FileSystem.moveAsync({
+                from: videoData.thumbnailUri,
+                to: newThumbPath
+              });
+              videoData.thumbnailUri = newThumbPath;
+            }
+          }
+        }
+      }
+
+      // Verileri hazırla ve undefined kontrolü yap
+      const id = videoData.id || `video_${Date.now()}`;
+      const name = videoData.name || 'İsimsiz Video';
+      const description = videoData.description || '';
+      const uri = videoData.uri || '';
+      const originalUri = videoData.originalUri || videoData.uri || '';
+      const duration = Number(videoData.duration) || 0;
+      const startTime = Number(videoData.startTime) || 0;
+      const endTime = Number(videoData.endTime) || 0;
+      const createdAt = videoData.createdAt || new Date().toISOString();
+      const thumbnailUri = videoData.thumbnailUri || '';
+
+      // SQL sorgusunu oluştur
+      const sql = `
+        INSERT OR REPLACE INTO videos (
+          id, name, description, uri, originalUri, 
+          duration, startTime, endTime, createdAt, thumbnailUri
+        ) VALUES (
+          '${id}', 
+          '${name.replace(/'/g, "''")}', 
+          '${description.replace(/'/g, "''")}', 
+          '${uri.replace(/'/g, "''")}', 
+          '${originalUri.replace(/'/g, "''")}', 
+          ${duration}, 
+          ${startTime}, 
+          ${endTime}, 
+          '${createdAt}', 
+          '${thumbnailUri.replace(/'/g, "''")}'
+        );
+      `;
+
+      console.log('Çalıştırılacak SQL sorgusu:', sql);
+      const insertResult = await this.db.execAsync(sql);
+      console.log('SQL ekleme sonucu:', insertResult);
+      console.log('Video başarıyla kaydedildi');
+
+      // Eklenen videoyu doğrula
+      const verifyResult = await this.db.execAsync(`SELECT * FROM videos WHERE id = '${id}';`);
+      console.log('Doğrulama sonucu:', verifyResult);
+
+      return videoData;
+    } catch (error) {
+      console.error('Video ekleme hatası:', error);
+      throw error;
+    }
+  }
+
+  async getVideos() {
+    try {
+      if (!this.db) {
+        await this.init();
+      }
+
+      const result = await this.db.getAllAsync('SELECT * FROM videos ORDER BY createdAt DESC');
+      console.log('Bulunan videolar:', result);
+
+      if (Array.isArray(result)) {
+        console.log(`${result.length} video bulundu`);
+        return result;
+      }
+
+      console.log('Video bulunamadı veya geçersiz sonuç');
+      return [];
+    } catch (error) {
+      console.error('Videoları getirme hatası:', error);
+      return [];
+    }
+  }
+
+  async deleteVideo(id) {
+    try {
+      if (!this.db) await this.init();
+
+      console.log('Video silme işlemi başlatılıyor, ID:', id);
+
+      // Önce video bilgilerini al
+      const result = await this.db.getAllAsync(`SELECT * FROM videos WHERE id = '${id}'`);
+      console.log('Video arama sonucu:', result);
+
+      if (result && result.length > 0) {
+        const video = result[0];
+        console.log('Silinecek video bulundu:', video);
+
+        // Dosyaları sil
+        if (Platform.OS === 'ios') {
+          try {
+            if (video.uri) {
+              const uriExists = await FileSystem.getInfoAsync(video.uri);
+              if (uriExists.exists) {
+                await FileSystem.deleteAsync(video.uri, { idempotent: true });
+                console.log('Video dosyası silindi:', video.uri);
+              }
+            }
+            
+            if (video.thumbnailUri) {
+              const thumbnailExists = await FileSystem.getInfoAsync(video.thumbnailUri);
+              if (thumbnailExists.exists) {
+                await FileSystem.deleteAsync(video.thumbnailUri, { idempotent: true });
+                console.log('Thumbnail dosyası silindi:', video.thumbnailUri);
+              }
+            }
+          } catch (fileError) {
+            console.error('Dosya silme hatası:', fileError);
+          }
+        }
+
+        // Veritabanından kaydı sil
+        await this.db.execAsync(`DELETE FROM videos WHERE id = '${id}'`);
+        console.log('Video veritabanından silindi');
+        return true;
+      }
+
       console.log('Silinecek video bulunamadı');
       return true;
-    }
-  } catch (error) {
-    console.error('Video silme hatası:', error);
-    return true;
-  } finally{
-    navigation.replace('Home');
-  }
-};
-
-const resetDatabase = async () => {
-  try {
-    console.log('Veritabanı sıfırlama başlatılıyor...');
-    const db = getDatabase();
-
-    // 1. Önce mevcut videoları al
-    const videos = await getVideos();
-    console.log('Silinecek video sayısı:', videos.length);
-
-    // 2. Dosya sistemini temizle
-    for (const video of videos) {
-      try {
-        // Video dosyasını sil
-        if (video.uri) {
-          const videoExists = await FileSystem.getInfoAsync(video.uri);
-          if (videoExists.exists) {
-            await FileSystem.deleteAsync(video.uri, { idempotent: true });
-            console.log('Video dosyası silindi:', video.uri);
-          }
-        }
-
-        // Thumbnail dosyasını sil
-        if (video.thumbnailUri) {
-          const thumbnailExists = await FileSystem.getInfoAsync(video.thumbnailUri);
-          if (thumbnailExists.exists) {
-            await FileSystem.deleteAsync(video.thumbnailUri, { idempotent: true });
-            console.log('Thumbnail dosyası silindi:', video.thumbnailUri);
-          }
-        }
-      } catch (error) {
-        console.error('Dosya silme hatası:', error);
-      }
-    }
-
-    // 3. Ana dizinleri temizle
-    try {
-      const videosDir = FileSystem.documentDirectory + 'videos/';
-      const thumbnailsDir = FileSystem.documentDirectory + 'thumbnails/';
-
-      const videosDirInfo = await FileSystem.getInfoAsync(videosDir);
-      const thumbnailsDirInfo = await FileSystem.getInfoAsync(thumbnailsDir);
-
-      if (videosDirInfo.exists) {
-        await FileSystem.deleteAsync(videosDir, { idempotent: true });
-        console.log('Videos dizini silindi');
-      }
-
-      if (thumbnailsDirInfo.exists) {
-        await FileSystem.deleteAsync(thumbnailsDir, { idempotent: true });
-        console.log('Thumbnails dizini silindi');
-      }
     } catch (error) {
-      console.error('Dizin silme hatası:', error);
+      console.error('Video silme hatası:', error);
+      return false;
     }
+  }
 
-    // 4. Veritabanını sıfırla
+  async deleteAllVideos() {
     try {
-      // Tabloyu sil
-      await db.execAsync('DROP TABLE IF EXISTS videos');
+      if (!this.db) await this.init();
+      
+      console.log('Veritabanı sıfırlama başlatılıyor...');
+
+      // Mevcut videoları al
+      const videos = await this.getVideos();
+      console.log('Silinecek video sayısı:', videos.length);
+
+      // iOS için dosya sistemini temizle
+      if (Platform.OS === 'ios') {
+        // Dosyaları sil
+        for (const video of videos) {
+          try {
+            if (video.uri) {
+              const videoExists = await FileSystem.getInfoAsync(video.uri);
+              if (videoExists.exists) {
+                await FileSystem.deleteAsync(video.uri, { idempotent: true });
+                console.log('Video dosyası silindi:', video.uri);
+              }
+            }
+
+            if (video.thumbnailUri) {
+              const thumbnailExists = await FileSystem.getInfoAsync(video.thumbnailUri);
+              if (thumbnailExists.exists) {
+                await FileSystem.deleteAsync(video.thumbnailUri, { idempotent: true });
+                console.log('Thumbnail dosyası silindi:', video.thumbnailUri);
+              }
+            }
+          } catch (error) {
+            console.error('Dosya silme hatası:', error);
+          }
+        }
+
+        // Ana dizinleri temizle
+        try {
+          const videosDir = `${FileSystem.documentDirectory}videos/`;
+          const thumbnailsDir = `${FileSystem.documentDirectory}thumbnails/`;
+
+          const videosDirInfo = await FileSystem.getInfoAsync(videosDir);
+          const thumbnailsDirInfo = await FileSystem.getInfoAsync(thumbnailsDir);
+
+          if (videosDirInfo.exists) {
+            await FileSystem.deleteAsync(videosDir, { idempotent: true });
+            console.log('Videos dizini silindi');
+          }
+
+          if (thumbnailsDirInfo.exists) {
+            await FileSystem.deleteAsync(thumbnailsDir, { idempotent: true });
+            console.log('Thumbnails dizini silindi');
+          }
+        } catch (error) {
+          console.error('Dizin silme hatası:', error);
+        }
+      }
+
+      // Veritabanını sıfırla
+      await this.db.execAsync('DROP TABLE IF EXISTS videos');
       console.log('Tablo silindi');
 
       // Yeni tabloyu oluştur
-      await db.execAsync(`
+      await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS videos (
           id TEXT PRIMARY KEY,
           name TEXT,
@@ -266,24 +315,16 @@ const resetDatabase = async () => {
       console.log('Yeni tablo oluşturuldu');
 
       // Kontrol et
-      const result = await db.execAsync('SELECT * FROM videos');
+      const result = await this.db.execAsync('SELECT * FROM videos');
       console.log('Tablo kontrol sonucu:', result);
 
       return true;
-    } catch (dbError) {
-      console.error('Veritabanı işlem hatası:', dbError);
-      throw dbError;
+    } catch (error) {
+      console.error('Veritabanı sıfırlama hatası:', error);
+      return false;
     }
-  } catch (error) {
-    console.error('Veritabanı sıfırlama ana hatası:', error);
-    throw error;
   }
-};
+}
 
-export { 
-  setupDatabase, 
-  addVideo, 
-  getVideos,
-  deleteVideo,
-  resetDatabase
-};
+const database = new Database();
+export default database;
