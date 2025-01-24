@@ -1,0 +1,41 @@
+# Node.js modüllerini dışarıda bırak
+StoryCut/node_modules/
+
+# Çalışma sırasında oluşturulan dosyalar
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+
+# İşletim sistemi veya IDE tarafından oluşturulan dosyalar
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.bak
+*.idea/
+*.vscode/
+.vscode/
+*.env
+.env.*
+
+# Geçici build dosyalarını dışarıda bırak
+dist/
+build/
+
+# Test coverage dosyaları
+coverage/
+
+# Git stash dosyaları
+*.patch
+*.orig
+
+# Başka dillerden derlenen dosyalar (örnekler)
+*.pyc
+*.class
+
+# Diğer örnekler
+*.out
+*.exe
