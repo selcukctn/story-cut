@@ -1,0 +1,6 @@
+module Pods_StoryCut {
+  umbrella header "Pods-StoryCut-umbrella.h"
+
+  export *
+  module * { export * }
+}

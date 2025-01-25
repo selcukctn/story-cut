@@ -1,0 +1,265 @@
+{
+  "name": "ffmpeg-kit-react-native",
+  "version": "6.0.2",
+  "summary": "FFmpeg Kit for React Native",
+  "homepage": "https://github.com/arthenica/ffmpeg-kit",
+  "license": "LGPL-3.0",
+  "authors": "ARTHENICA <open-source@arthenica.com> (https://www.arthenica.com)",
+  "platforms": {
+    "ios": null
+  },
+  "requires_arc": true,
+  "static_framework": true,
+  "source": {
+    "git": "https://github.com/arthenica/ffmpeg-kit.git",
+    "tag": "react.native.v6.0.2"
+  },
+  "default_subspecs": "https",
+  "dependencies": {
+    "React-Core": [
+
+    ]
+  },
+  "subspecs": [
+    {
+      "name": "min",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-min": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "min-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-min": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    },
+    {
+      "name": "min-gpl",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-min-gpl": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "min-gpl-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-min-gpl": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    },
+    {
+      "name": "https",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-https": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "https-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-https": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    },
+    {
+      "name": "https-gpl",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-https-gpl": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "https-gpl-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-https-gpl": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    },
+    {
+      "name": "audio",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-audio": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "audio-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-audio": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    },
+    {
+      "name": "video",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-video": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "video-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-video": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    },
+    {
+      "name": "full",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-full": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "full-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-full": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    },
+    {
+      "name": "full-gpl",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-full-gpl": [
+          "6.0"
+        ]
+      },
+      "platforms": {
+        "ios": "12.1"
+      }
+    },
+    {
+      "name": "full-gpl-lts",
+      "source_files": [
+        "**/FFmpegKitReactNativeModule.m",
+        "**/FFmpegKitReactNativeModule.h"
+      ],
+      "dependencies": {
+        "ffmpeg-kit-ios-full-gpl": [
+          "6.0.LTS"
+        ]
+      },
+      "platforms": {
+        "ios": "10"
+      }
+    }
+  ]
+}
