@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Alert,  StatusBar, } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Alert,  StatusBar, SafeAreaView, } from 'react-native';
 import { Video } from 'expo-av';
 import { useNavigation } from '@react-navigation/native';
 import colors from '../utils/colors';
@@ -83,11 +83,11 @@ const VideoDetail = ({ route }) => {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container}>
        <StatusBar backgroundColor={colors.main_bg} barStyle={'light-content'} />
       <TouchableOpacity 
         style={styles.backButton}
-        onPress={() => navigation.replace('Home')}
+        onPress={() => navigation.goBack('Home')}
       >
         <Ionicons name="arrow-back" size={24} color={colors.main_green} />
       </TouchableOpacity>
@@ -135,7 +135,7 @@ const VideoDetail = ({ route }) => {
           <Text style={styles.deleteButtonText}>Delete Video</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </SafeAreaView>
   );
 };
 

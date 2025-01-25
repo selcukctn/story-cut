@@ -1,31 +1,39 @@
-import React, { useContext, useEffect,} from "react";
-import { View, StyleSheet, Dimensions, Text, Pressable, Image, FlatList, SafeAreaView, ActivityIndicator, Alert,  StatusBar, } from "react-native";
+import React, { useContext, useEffect } from "react";
+import { View, StyleSheet, Dimensions, Text, Pressable, Image, FlatList, SafeAreaView, ActivityIndicator, Alert, StatusBar, Platform } from "react-native";
 import useVideoStore from "../stores/useVideoStore";
 import Skeleton from "../components/Skeleton";
 import colors from "../utils/colors";
 import film_ico from "../img/film.png";
 import settings_ico from "../img/settings.png";
 import { format } from 'date-fns';
-import { tr } from 'date-fns/locale';
-import Ionicons from 'react-native-vector-icons/Ionicons';
+
 
 const HomePage = ({ navigation }) => {
     const videos = useVideoStore(state => state.videos);
     const loading = useVideoStore(state => state.loading);
     const initializeStore = useVideoStore(state => state.initializeStore);
-    const resetStore = useVideoStore(state => state.resetStore);
+    const clearVideos = useVideoStore(state => state.clearVideos);
 
     useEffect(() => {
         initializeStore();
     }, []);
 
     const handleRenderItem = ({ item }) => {
-        console.log('Render edilen video:', item);
+        // URI'yi platform'a göre düzenle ve kontrol et
+        let imageUri = item.thumbnailUri;
+        
+        if (Platform.OS === 'ios' && imageUri?.startsWith('file://')) {
+            imageUri = imageUri.substring(7); // 'file://' kısmını kaldır
+        }
+
+        console.log('Platform:', Platform.OS);
+        console.log('Orijinal URI:', item.thumbnailUri);
+        console.log('Düzenlenmiş URI:', imageUri);
+        
         return (
             <Pressable 
                 style={styles.videoCard}
                 onPress={() => {
-                    console.log('Seçilen video:', item);
                     if (item && item.id) {
                         navigation.navigate('VideoDetail', { video: item });
                     } else {
@@ -33,10 +41,6 @@ const HomePage = ({ navigation }) => {
                     }
                 }}
             >
-                <Image 
-                    source={{ uri: item.thumbnailUri }}
-                    style={styles.thumbnail}
-                />
                 <View style={styles.videoInfo}>
                     <Text style={styles.videoName} numberOfLines={1}>
                         {item.name || 'İsimsiz Video'}
@@ -61,39 +65,27 @@ const HomePage = ({ navigation }) => {
                         </Text>
                     </View>
                 </View>
+                <Image 
+                    source={{ 
+                        uri: imageUri,
+                        cache: 'reload'
+                    }}
+                    style={styles.thumbnail}
+                    resizeMode="cover"
+                    onError={(error) => {
+                        console.error('Resim yükleme hatası:', error.nativeEvent.error);
+                    }}
+                    onLoadStart={() => {
+                        console.log('Resim yüklenmeye başladı:', imageUri);
+                    }}
+                    onLoad={() => {
+                        console.log('Resim başarıyla yüklendi');
+                    }}
+                />
             </Pressable>
         );
     }
 
-    const handleReset = () => {
-        Alert.alert(
-            'Veritabanını Sıfırla',
-            'Tüm videolar ve veriler silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
-            [
-                {
-                    text: 'İptal',
-                    style: 'cancel'
-                },
-                {
-                    text: 'Sıfırla',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            const result = await resetStore();
-                            if (result) {
-                                Alert.alert('Başarılı', 'Veritabanı başarıyla sıfırlandı');
-                            } else {
-                                Alert.alert('Hata', 'Sıfırlama işlemi başarısız oldu');
-                            }
-                        } catch (error) {
-                            console.error('Sıfırlama hatası:', error);
-                            Alert.alert('Hata', 'Sıfırlama işlemi sırasında bir hata oluştu');
-                        }
-                    }
-                }
-            ]
-        );
-    };
 
     if (loading) {
         return (
@@ -195,30 +187,40 @@ const styles = StyleSheet.create({
         width: width / 1.1,
         height: height / 5,
         backgroundColor: colors.main_gray,
-        borderRadius: 10,
-        marginVertical: 5,
+        borderRadius: 15,
+        marginVertical: 8,
         flexDirection: 'row',
         overflow: 'hidden',
+        padding: 12,
+        gap: 12,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     thumbnail: {
         width: width / 3,
         height: '100%',
-        backgroundColor: colors.main_bg,
+        backgroundColor: '#2c2c2c',
+        borderRadius: 10,
     },
     videoInfo: {
         flex: 1,
-        padding: 10,
         justifyContent: 'space-between',
     },
     videoName: {
         color: colors.white,
-        fontSize: width / 25,
+        fontSize: width / 22,
         fontWeight: 'bold',
         marginBottom: 4,
     },
     videoDescription: {
         color: colors.white,
-        fontSize: width / 32,
+        fontSize: width / 30,
         opacity: 0.8,
         marginBottom: 8,
     },

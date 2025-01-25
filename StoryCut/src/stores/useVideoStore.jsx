@@ -1,20 +1,24 @@
 import { create } from "zustand";
-import { setupDatabase, addVideo, getVideos, resetDatabase, deleteVideo } from '../services/database';
+import database from '../services/database';
+import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 
 const useVideoStore = create((set, get) => ({
   videos: [],
   loading: false,
   error: null,
   
-  // Veritabanını başlat ve videoları yükle
   initializeStore: async () => {
     set({ loading: true, error: null });
     try {
-      await setupDatabase();
-      const savedVideos = await getVideos();
-      console.log('Yüklenen videolar:', savedVideos);
+      console.log('Veritabanı başlatılıyor...');
+      await database.init();
+      const result = await database.getVideos();
+      const videos = Array.isArray(result) ? result : [];
+      console.log('Yüklenen video sayısı:', videos.length);
+      
       set({ 
-        videos: savedVideos,
+        videos,
         loading: false 
       });
     } catch (error) {
@@ -26,25 +30,32 @@ const useVideoStore = create((set, get) => ({
     }
   },
 
-  // Yeni video ekle
   addVideo: async (videoData) => {
     set({ loading: true, error: null });
     try {
-      const newVideo = {
+      console.log('Video ekleniyor:', videoData.uri);
+      
+      const newVideoData = {
         ...videoData,
         id: `video_${Date.now()}`,
+        createdAt: new Date().toISOString()
       };
 
-      await addVideo(newVideo);
+      await database.addVideo(newVideoData);
       
-      // Store'u güncelle
-      set(state => ({
-        videos: [newVideo, ...state.videos],
-        loading: false
-      }));
-      return newVideo;
+      const result = await database.getVideos();
+      const videos = Array.isArray(result) ? result : [];
+      
+      console.log('Video başarıyla eklendi');
+      
+      set({ 
+        videos,
+        loading: false 
+      });
+      
+      return newVideoData;
     } catch (error) {
-      console.error('Video ekleme hatası db:', error);
+      console.error('Video ekleme hatası:', error);
       set({ 
         error: error.message,
         loading: false 
@@ -53,11 +64,14 @@ const useVideoStore = create((set, get) => ({
     }
   },
 
-  // Video listesini yenile
   refreshVideos: async () => {
     set({ loading: true, error: null });
     try {
-      const videos = await getVideos();
+      console.log('Videolar yenileniyor...');
+      const result = await database.getVideos();
+      const videos = Array.isArray(result) ? result : [];
+      
+      console.log('Videolar yenilendi, toplam:', videos.length);
       set({ 
         videos,
         loading: false 
@@ -71,56 +85,61 @@ const useVideoStore = create((set, get) => ({
     }
   },
 
-  // Hata durumunu temizle
-  clearError: () => set({ error: null }),
-
-  // Loading durumunu güncelle
-  setLoading: (loading) => set({ loading }),
-
-  resetStore: async () => {
-    try {
-      set({ loading: true });
-      console.log('Store sıfırlama başlatılıyor...');
-      
-      const result = await resetDatabase();
-      console.log('Veritabanı sıfırlama sonucu:', result);
-      
-      if (result) {
-        set({ videos: [] });
-        console.log('Store sıfırlandı ve videos array temizlendi');
-        return true;
-      }
-      
-      console.error('Veritabanı sıfırlanamadı');
-      return false;
-    } catch (error) {
-      console.error('Store sıfırlama hatası:', error);
-      return false;
-    } finally {
-      set({ loading: false });
-    }
-  },
   deleteVideo: async (id) => {
     try {
       set({ loading: true });
-      console.log('Store: Video silme işlemi başlatılıyor, ID:', id);
+      console.log('Video siliniyor, ID:', id);
       
-      const result = await deleteVideo(id);  // Yeniden adlandırılmış fonksiyonu kullan
+      const success = await database.deleteVideo(id);
       
-      if (result) {
-        const videos = await getAllVideos();
-        set({ videos });
-        console.log('Store: Video silindi ve veriler güncellendi');
+      if (success) {
+        const result = await database.getVideos();
+        const videos = Array.isArray(result) ? result : [];
+        
+        console.log('Video başarıyla silindi');
+        set({ 
+          videos,
+          loading: false 
+        });
+        return true;
+      } else {
+        throw new Error('Video silinemedi');
       }
-      
-      return result;
     } catch (error) {
-      //console.error('Store: Video silme hatası:', error);
-      return true;
-    } finally {
-      set({ loading: false });
+      console.error('Video silme hatası:', error);
+      set({ 
+        error: error.message,
+        loading: false 
+      });
+      return false;
     }
   },
+
+  clearVideos: async () => {
+    set({ loading: true, error: null });
+    try {
+      const result = await database.deleteAllVideos();
+      if (result) {
+        set({ videos: [], loading: false });
+        return true;
+      } else {
+        throw new Error('Veritabanı sıfırlama başarısız oldu');
+      }
+    } catch (error) {
+      console.error('Video temizleme hatası:', error);
+      set({ error: error.message, loading: false });
+      return false;
+    }
+  },
+  
+  clearError: () => set({ error: null }),
+  setLoading: (loading) => set({ loading }),
+  
+  getVideoCount: () => get().videos.length,
+  
+  getVideoById: (id) => get().videos.find(video => video.id === id),
+  
+  resetStore: () => set({ videos: [], loading: false, error: null })
 }));
 
 export default useVideoStore;

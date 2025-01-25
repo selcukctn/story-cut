@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Pressable, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Pressable, Image, SafeAreaView } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../utils/colors';
@@ -23,7 +23,7 @@ const SelectVideo = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Topbar */}
       <View style={styles.top_bar}>
         <Pressable style={styles.send_button} onPress={() => { navigation.goBack() }}>
@@ -47,7 +47,7 @@ const SelectVideo = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 const { width, height } = Dimensions.get('window');

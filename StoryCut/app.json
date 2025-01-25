@@ -12,47 +12,42 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.storycut.app"
+      "bundleIdentifier": "com.StoryCut",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "NSDocumentsFolderUsageDescription": "Video ve veritabanı dosyalarını kaydetmek için belge klasörüne erişim gerekiyor",
+        "NSPhotoLibraryUsageDescription": "Video ve thumbnail kaydetmek için fotoğraf kitaplığına erişim gerekiyor",
+        "NSPhotoLibraryAddUsageDescription": "Video ve thumbnail kaydetmek için fotoğraf kitaplığına erişim gerekiyor"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "package": "com.storycut.app"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@config-plugins/ffmpeg-kit-react-native",
-      "react-native-video",
       [
-        "expo-sqlite",
+        "expo-file-system",
         {
-          "enableFTS": true,
-          "useSQLCipher": true,
-          "android": {
-            "enableFTS": false,
-            "useSQLCipher": false
-          },
           "ios": {
-            "customBuildFlags": [
-              "-DSQLITE_ENABLE_DBSTAT_VTAB=1 -DSQLITE_ENABLE_SNAPSHOT=1"
-            ]
+            "usesIcloudStorage": true
           }
         }
       ],
-      "expo-asset"
-    ],
-    "entryPoint": "./src/route/Wrapper.jsx",
-    "assets": [
-      "./src/db/videos.db"
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
     ]
   }
 }

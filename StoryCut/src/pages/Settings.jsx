@@ -16,7 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import left_ico from '../img/angle-left.png';
 
 const Settings = ({navigation}) => {
-  const resetStore = useVideoStore(state => state.resetStore);
+  const deleteAllVideos = useVideoStore(state => state.clearVideos);
 
   const handleResetDatabase = () => {
     setTimeout(() => {
@@ -33,14 +33,19 @@ const Settings = ({navigation}) => {
             style: 'destructive',
             onPress: async () => {
               try {
-                await resetStore();
-                Alert.alert('Success', 'Database has been successfully reset');
-                return true;
+                const result = await deleteAllVideos();
+                if (result) {
+                  Alert.alert('Success', 'Database has been successfully reset');
+                  navigation.goBack();
+                  return true;
+                } else {
+                  Alert.alert('Error', 'Failed to reset database');
+                  return false;
+                }
               } catch (error) {
                 console.error('Database reset error:', error);
-                return true;
-              } finally{
-                navigation.replace('Home');
+                Alert.alert('Error', 'An error occurred while resetting database');
+                return false;
               }
             }
           }

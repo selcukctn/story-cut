@@ -7,13 +7,13 @@ import {
   TouchableOpacity, 
   PanResponder, 
   Animated,
-  ScrollView,
   Image,
   SafeAreaView,
   Modal,
   TextInput,
   Alert,
   StatusBar,
+  Platform,
 } from 'react-native';
 import colors from '../utils/colors';
 import left_ico from '../img/angle-left.png';
@@ -25,15 +25,15 @@ import useVideoStore from '../stores/useVideoStore';
 import * as FileSystem from 'expo-file-system';
 import { useNavigation } from '@react-navigation/native';
 const { width, height } = Dimensions.get('window');
-const TIMELINE_WIDTH = width - 40;
+const TIMELINE_WIDTH = width/1.26;
 const MIN_TRIM_DURATION = 1;
 const THUMBNAIL_WIDTH = 50;
 const THUMBNAIL_COUNT = 10;
+const HANDLE_WIDTH = 32;
 
 const VideoTrimTool = ({route}) => {
   const videoUri = route.params.videoUri;
   const videoRef = useRef(null);
-  const scrollViewRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -46,15 +46,18 @@ const VideoTrimTool = ({route}) => {
   const [trimmedVideoData, setTrimmedVideoData] = useState(null);
   
   const startX = useRef(new Animated.Value(0)).current;
-  const endX = useRef(new Animated.Value(TIMELINE_WIDTH)).current;
+  const endX = useRef(new Animated.Value(TIMELINE_WIDTH - HANDLE_WIDTH)).current;
   const progressX = useRef(new Animated.Value(0)).current;
 
   const { addVideo, setLoading } = useVideoStore();
   const navigation = useNavigation();
 
   useEffect(() => {
-    generateThumbnails();
-  }, [duration]);
+    if (duration > 0 && videoUri) {
+      console.log('Starting thumbnail generation with videoUri:', videoUri);
+      generateThumbnails();
+    }
+  }, [duration, videoUri]);
 
   const generateThumbnails = async () => {
     if (!duration) return;
@@ -62,34 +65,67 @@ const VideoTrimTool = ({route}) => {
     try {
       const thumbnailArray = [];
       const interval = duration / THUMBNAIL_COUNT;
+      console.log('Thumbnail oluşturuluyor, süre:', duration, 'aralık:', interval);
+
+      // iOS için videoUri'yi temizle
+      const cleanVideoUri = Platform.OS === 'ios' 
+        ? videoUri.replace('file://', '') 
+        : videoUri;
+
+      console.log('Temizlenmiş video URI:', cleanVideoUri);
 
       for (let i = 0; i < THUMBNAIL_COUNT; i++) {
-        const time = i * interval * 1000;
-        const thumbnail = await VideoThumbnails.getThumbnailAsync(
-          videoUri,
-          {
-            time: time,
-            quality: 0.5,
+        try {
+          const timeInMillis = Math.floor(i * interval * 1000);
+          console.log(`${i + 1}. thumbnail oluşturuluyor, zaman:`, timeInMillis);
+          
+          const options = {
+            time: timeInMillis,
+            quality: 1,
+          };
+
+          if (Platform.OS === 'ios') {
+            options.headers = { 'Range': 'bytes=0-' };
           }
-        );
-        thumbnailArray.push(thumbnail.uri);
+
+          const thumbnail = await VideoThumbnails.getThumbnailAsync(
+            cleanVideoUri,
+            options
+          );
+          
+          if (thumbnail?.uri) {
+            console.log(`${i + 1}. thumbnail başarıyla oluşturuldu`);
+            thumbnailArray.push(thumbnail.uri);
+          } else {
+            console.log(`${i + 1}. thumbnail oluşturulamadı`);
+          }
+        } catch (innerError) {
+          console.error(`${i + 1}. thumbnail oluşturma hatası:`, innerError);
+          // Hata durumunda devam et
+          continue;
+        }
       }
-      setThumbnails(thumbnailArray);
+
+      console.log('Toplam oluşturulan thumbnail sayısı:', thumbnailArray.length);
+      if (thumbnailArray.length > 0) {
+        setThumbnails(thumbnailArray);
+      }
     } catch (error) {
-      console.log('Thumbnail oluşturma hatası:', error);
+      console.error('Thumbnail oluşturma ana hatası:', error);
     }
   };
 
   const startPanResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
       if (isPlaying) {
         videoRef.current?.pauseAsync();
         setIsPlaying(false);
       }
     },
-    onPanResponderMove: (_, gestureState) => {
-      const newPosition = Math.max(0, gestureState.moveX - 20);
+    onPanResponderMove: (event, gestureState) => {
+      const newPosition = Math.max(0, Math.min(gestureState.moveX - 20, TIMELINE_WIDTH - HANDLE_WIDTH));
       const maxPosition = endX._value - MIN_TRIM_DURATION * (TIMELINE_WIDTH / duration);
       
       if (newPosition >= 0 && newPosition < maxPosition) {
@@ -106,9 +142,12 @@ const VideoTrimTool = ({route}) => {
 
   const endPanResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onPanResponderMove: (_, gestureState) => {
-      const newPosition = gestureState.moveX - 20;
-      if (newPosition <= TIMELINE_WIDTH && newPosition > startX._value + MIN_TRIM_DURATION * (TIMELINE_WIDTH / duration)) {
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderMove: (event, gestureState) => {
+      const newPosition = Math.min(Math.max(gestureState.moveX - 20, 0), TIMELINE_WIDTH - HANDLE_WIDTH);
+      const minPosition = startX._value + MIN_TRIM_DURATION * (TIMELINE_WIDTH / duration);
+      
+      if (newPosition <= TIMELINE_WIDTH - HANDLE_WIDTH && newPosition > minPosition) {
         endX.setValue(newPosition);
         if (isPlaying) {
           videoRef.current?.pauseAsync();
@@ -202,6 +241,82 @@ const VideoTrimTool = ({route}) => {
     };
   };
 
+  const generateThumbnail = async (videoUri) => {
+    try {
+      console.log('Thumbnail oluşturuluyor, video URI:', videoUri);
+      
+      // iOS için dizin oluştur
+      const thumbnailDir = `${FileSystem.documentDirectory}thumbnails`;
+      await FileSystem.makeDirectoryAsync(thumbnailDir, { intermediates: true });
+      
+      // Video dosyasının varlığını kontrol et
+      const videoExists = await FileSystem.getInfoAsync(videoUri);
+      console.log('Video dosya kontrolü:', videoExists);
+
+      if (!videoExists.exists) {
+        throw new Error('Video dosyası bulunamadı');
+      }
+
+      // Birden fazla thumbnail oluştur
+      const frameCount = 10; // Kaç tane thumbnail istiyorsak
+      const thumbnailUris = [];
+
+      for (let i = 0; i < frameCount; i++) {
+        const timeInSeconds = (duration / frameCount) * i;
+        const outputUri = `${thumbnailDir}/thumb_${Date.now()}_${i}.jpg`;
+        
+        const command = Platform.OS === 'ios'
+          ? `-ss ${timeInSeconds} -i "${videoUri.replace('file://', '')}" -vframes 1 -q:v 2 "${outputUri.replace('file://', '')}"`
+          : `-ss ${timeInSeconds} -i "${videoUri}" -vframes 1 -q:v 2 "${outputUri}"`;
+
+        console.log(`${i + 1}. thumbnail için FFmpeg komutu:`, command);
+        
+        try {
+          const result = await FFmpegKit.execute(command);
+          const returnCode = await result.getReturnCode();
+
+          if (returnCode.isValueSuccess()) {
+            const thumbExists = await FileSystem.getInfoAsync(outputUri);
+            if (thumbExists.exists) {
+              thumbnailUris.push(outputUri);
+              console.log(`${i + 1}. thumbnail başarıyla oluşturuldu:`, outputUri);
+            }
+          }
+        } catch (frameError) {
+          console.error(`${i + 1}. thumbnail oluşturma hatası:`, frameError);
+        }
+      }
+
+      // En az bir thumbnail oluşturulduysa ilkini döndür
+      if (thumbnailUris.length > 0) {
+        console.log('Toplam oluşturulan thumbnail sayısı:', thumbnailUris.length);
+        setThumbnails(thumbnailUris); // Tüm thumbnailları state'e kaydet
+        return thumbnailUris[0]; // İlk thumbnail'ı ana thumbnail olarak döndür
+      }
+
+      throw new Error('Hiç thumbnail oluşturulamadı');
+
+    } catch (error) {
+      console.error('Thumbnail oluşturma ana hatası:', error);
+      
+      // Varsayılan thumbnail oluştur
+      const defaultThumbUri = `${thumbnailDir}/thumb_${Date.now()}.jpg`;
+      const defaultThumbData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      
+      try {
+        await FileSystem.writeAsStringAsync(defaultThumbUri, defaultThumbData, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        
+        console.log('Varsayılan thumbnail oluşturuldu:', defaultThumbUri);
+        return defaultThumbUri;
+      } catch (writeError) {
+        console.error('Varsayılan thumbnail yazma hatası:', writeError);
+        throw writeError;
+      }
+    }
+  };
+
   const saveVideo = async () => {
     if (!videoRef.current) return;
     
@@ -212,15 +327,53 @@ const VideoTrimTool = ({route}) => {
       const selectedTimes = getSelectedTimes();
       console.log('Seçilen süreler:', selectedTimes);
 
-      const outputUri = `${FileSystem.cacheDirectory}trimmed_video_${Date.now()}.mp4`;
-      
-      // Video kesme işlemi
-      const command = `-i ${videoUri} -ss ${selectedTimes.start} -t ${selectedTimes.end - selectedTimes.start} -c:v copy -c:a copy ${outputUri}`;
-      await FFmpegKit.execute(command);
+      // iOS için dizinleri oluştur
+      if (Platform.OS === 'ios') {
+        const videosDir = `${FileSystem.documentDirectory}videos`;
+        await FileSystem.makeDirectoryAsync(videosDir, { intermediates: true });
+      }
 
-      // Thumbnail oluştur
-      const thumbnailUri = await generateThumbnail(outputUri);
+      const outputUri = Platform.OS === 'ios' 
+        ? `${FileSystem.documentDirectory}videos/trimmed_${Date.now()}.mp4`
+        : `${FileSystem.cacheDirectory}trimmed_video_${Date.now()}.mp4`;
+
+      console.log('Video kaydedilecek yol:', outputUri);
+      console.log('Orijinal video URI:', videoUri);
+
+      // FFmpeg komutu
+      const command = Platform.OS === 'ios'
+        ? `-i "${videoUri.replace('file://', '')}" -ss ${selectedTimes.start} -t ${selectedTimes.end - selectedTimes.start} -c copy "${outputUri.replace('file://', '')}"`
+        : `-i "${videoUri}" -ss ${selectedTimes.start} -t ${selectedTimes.end - selectedTimes.start} -c:v copy -c:a copy "${outputUri}"`;
+
+      console.log('FFmpeg komutu:', command);
+
+      const result = await FFmpegKit.execute(command);
+      const returnCode = await result.getReturnCode();
       
+      if (returnCode.isValueError()) {
+        const logs = await result.getLogsAsString();
+        console.error('FFmpeg hata logları:', logs);
+        throw new Error(`FFmpeg işlemi başarısız: ${logs}`);
+      }
+
+      // Dosya varlığını kontrol et
+      const fileInfo = await FileSystem.getInfoAsync(outputUri);
+      if (!fileInfo.exists) {
+        throw new Error('Kesilen video dosyası oluşturulamadı');
+      }
+
+      console.log('Video başarıyla kaydedildi:', outputUri);
+
+      // Thumbnail oluşturmayı dene
+      let thumbnailUri;
+      try {
+        thumbnailUri = await generateThumbnail(outputUri);
+        console.log('Thumbnail başarıyla oluşturuldu:', thumbnailUri);
+      } catch (thumbError) {
+        console.warn('Thumbnail oluşturulamadı, varsayılan kullanılacak:', thumbError);
+        thumbnailUri = null; // Varsayılan thumbnail kullan
+      }
+
       // Video verilerini hazırla
       const videoData = {
         id: `video_${Date.now()}`,
@@ -228,49 +381,21 @@ const VideoTrimTool = ({route}) => {
         originalUri: videoUri,
         thumbnailUri: thumbnailUri,
         duration: Number((selectedTimes.end - selectedTimes.start).toFixed(2)),
-        startTime: Number(selectedTimes.start.toFixed(2)) || 0, // Kesinlikle sayı olduğundan emin ol
+        startTime: Number(selectedTimes.start.toFixed(2)),
         endTime: Number(selectedTimes.end.toFixed(2)),
         createdAt: new Date().toISOString(),
-        name: 'İsimsiz Video', // Varsayılan değerler ekle
+        name: 'İsimsiz Video',
         description: 'Açıklama yok'
       };
-
-      // Debug için tüm değerleri kontrol et
-      console.log('Hazırlanan video verisi:', JSON.stringify(videoData, null, 2));
-
-      // Zorunlu alanları kontrol et
-      const requiredFields = ['id', 'uri', 'startTime', 'endTime', 'duration', 'name'];
-      const missingFields = requiredFields.filter(field => 
-        videoData[field] === null || 
-        videoData[field] === undefined || 
-        (typeof videoData[field] === 'number' && isNaN(videoData[field]))
-      );
-
-      if (missingFields.length > 0) {
-        throw new Error(`Eksik alanlar: ${missingFields.join(', ')}`);
-      }
 
       setTrimmedVideoData(videoData);
       setModalVisible(true);
 
     } catch (error) {
-      console.error('Video kaydetme hatası:', error);
+      console.error('Video kaydetme detaylı hata:', error);
       Alert.alert('Hata', 'Video kaydedilirken bir hata oluştu: ' + error.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const generateThumbnail = async (videoUri) => {
-    try {
-      const thumbnail = await VideoThumbnails.getThumbnailAsync(videoUri, {
-        time: 0,
-        quality: 1
-      });
-      return thumbnail.uri;
-    } catch (error) {
-      console.error('Thumbnail oluşturma hatası:', error);
-      throw error;
     }
   };
 
@@ -280,28 +405,29 @@ const VideoTrimTool = ({route}) => {
         throw new Error('Video verisi bulunamadı');
       }
 
+      // iOS için dosya izinlerini kontrol et
+      if (Platform.OS === 'ios') {
+        const permissions = await FileSystem.getInfoAsync(FileSystem.documentDirectory);
+        if (!permissions.exists) {
+          throw new Error('Dosya dizini erişilebilir değil');
+        }
+      }
+
       // Tüm değerlerin dolu olduğundan emin ol
       const finalVideoData = {
         ...trimmedVideoData,
         name: videoName.trim() || 'İsimsiz Video',
         description: videoDescription.trim() || 'Açıklama yok',
-        createdAt: trimmedVideoData.createdAt || new Date().toISOString(),
-        duration: trimmedVideoData.duration || 0,
-        startTime: trimmedVideoData.startTime || 0,
-        endTime: trimmedVideoData.endTime || 0,
-        originalUri: trimmedVideoData.originalUri || trimmedVideoData.uri,
-        thumbnailUri: trimmedVideoData.thumbnailUri || ''
+        createdAt: new Date().toISOString(),
       };
 
       // Debug için kontrol
       console.log('Kaydedilecek final video verisi:', finalVideoData);
 
-      // Tüm gerekli alanların dolu olduğunu kontrol et
-      const requiredFields = ['id', 'name', 'uri', 'duration', 'startTime', 'endTime', 'createdAt'];
-      const missingFields = requiredFields.filter(field => !finalVideoData[field]);
-      
-      if (missingFields.length > 0) {
-        throw new Error(`Missing fields: ${missingFields.join(', ')}`);
+      // Dosyanın varlığını kontrol et
+      const fileInfo = await FileSystem.getInfoAsync(finalVideoData.uri);
+      if (!fileInfo.exists) {
+        throw new Error('Kesilen video dosyası bulunamadı');
       }
 
       // useVideoStore üzerinden kaydet
@@ -311,20 +437,20 @@ const VideoTrimTool = ({route}) => {
       setSaving(false);
       
       Alert.alert(
-        'Success',
-        'Video successfully saved!',
+        'Başarılı',
+        'Video başarıyla kaydedildi!',
         [
           {
-            text: 'OK',
+            text: 'Tamam',
             onPress: () => navigation.goBack()
           }
         ]
       );
     } catch (error) {
-      console.error('Video save error:', error);
+      console.error('Video kaydetme hatası:', error);
       Alert.alert(
-        'Error',
-        'An error occurred while saving the video: ' + error.message
+        'Hata',
+        'Video kaydedilirken bir hata oluştu: ' + error.message
       );
     }
   };
@@ -379,31 +505,30 @@ const VideoTrimTool = ({route}) => {
           </TouchableOpacity>
 
           <View style={styles.timelineWrapper}>
-            <ScrollView 
-              ref={scrollViewRef}
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.timelineScroll}
-            >
+            <View style={[styles.timelineContainer, { width: TIMELINE_WIDTH }]}>
               <View style={styles.thumbnailContainer}>
                 {thumbnails.map((uri, index) => (
                   <Image 
                     key={index}
                     source={{ uri }}
-                    style={styles.thumbnail}
+                    style={[styles.thumbnail, { width: TIMELINE_WIDTH / THUMBNAIL_COUNT }]}
+                    resizeMode="cover"
+                    onError={(error) => console.log('Image loading error:', error.nativeEvent.error)}
                   />
                 ))}
               </View>
 
-              <View style={styles.trimmerOverlay}>
+              <View style={[styles.trimmerOverlay, { width: TIMELINE_WIDTH }]}>
                 <Animated.View
                   style={[styles.darkArea, { width: startX }]}
+                  pointerEvents="none"
                 />
                 <Animated.View
                   style={[
                     styles.darkArea, 
                     { left: endX, right: 0 }
                   ]}
+                  pointerEvents="none"
                 />
 
                 <Animated.View
@@ -416,7 +541,11 @@ const VideoTrimTool = ({route}) => {
                 </Animated.View>
 
                 <Animated.View
-                  style={[styles.handle, styles.rightHandle, { left: endX }]}
+                  style={[
+                    styles.handle, 
+                    styles.rightHandle, 
+                    { left: endX }
+                  ]}
                   {...endPanResponder.panHandlers}
                 >
                   <View style={styles.handleBar}>
@@ -432,9 +561,10 @@ const VideoTrimTool = ({route}) => {
                       width: Animated.subtract(endX, startX),
                     },
                   ]}
+                  pointerEvents="none"
                 />
               </View>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </View>
@@ -552,48 +682,57 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     marginLeft: 10,
+    marginRight: 10,
     backgroundColor: '#2C2C2E',
     borderRadius: 8,
     overflow: 'hidden',
   },
-  timelineScroll: {
-    height: '100%',
+  timelineContainer: {
+    height: 44,
+    width: TIMELINE_WIDTH,
+    position: 'relative',
+    backgroundColor: '#2C2C2E',
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   thumbnailContainer: {
     flexDirection: 'row',
     height: '100%',
+    width: TIMELINE_WIDTH,
+    position: 'absolute',
   },
   thumbnail: {
-    width: 44,
     height: '100%',
+    width: TIMELINE_WIDTH / THUMBNAIL_COUNT,
   },
   trimmerOverlay: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
+    width: TIMELINE_WIDTH,
   },
   darkArea: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 4,
   },
   handle: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     width: 32,
+    marginRight:300,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFB800',
     zIndex: 10,
   },
   leftHandle: {
-    left: 0,
     borderTopRightRadius: 4,
     borderBottomRightRadius: 4,
   },
   rightHandle: {
-    right: 0,
     borderTopLeftRadius: 4,
     borderBottomLeftRadius: 4,
   },
@@ -616,6 +755,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFB800',
     backgroundColor: 'rgba(255, 184, 0, 0.2)',
+    zIndex: 5,
   },
   modalContainer: {
     flex: 1,
